@@ -11,10 +11,6 @@ use wayland_client::protocol::{
     wl_surface::WlSurface,
 };
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
-    zwlr_layer_shell_v1::{
-        Layer,
-        ZwlrLayerShellV1
-    },
     zwlr_layer_surface_v1::{
         ZwlrLayerSurfaceV1,
     },
@@ -23,10 +19,13 @@ use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
 use wayland_client::Main;
 use std::process::{Command};
 use smithay_client_toolkit::shm::AutoMemPool;
+use std::thread;
+use std::time::Duration;
 
 pub struct App {
+    pub hidden: bool,
     pub configured: bool,
-    pub focused: u32,
+    pub focused: Vec<u32>,
     pub tag_list: Vec<u32>,
     pub overlay: List,
     pub mempool: AutoMemPool,
@@ -54,6 +53,7 @@ impl Drawable for App {
 
 impl App {
     pub fn redraw(&mut self) {
+        self.hidden = true;
         let mut buffer = Buffer::new(
             self.overlay.get_width() as i32,
             self.overlay.get_height() as i32 + 10,
@@ -64,16 +64,23 @@ impl App {
         	self.overlay.get_width(),
         	self.overlay.get_height(),
     	);
-    	self.overlay = create_widget(self.focused, 10, &self.tag_list);
+    	self.overlay = create_widget(&self.focused, 7, &self.tag_list);
         buffer.composite(&self.overlay.to_surface(), 0, 0);
-        self.surface.damage(0, 0, self.overlay.get_width() as i32, self.overlay.get_height() as i32);
         buffer.attach(&self.surface,0,0);
+        self.surface.damage(0, 0, self.overlay.get_width() as i32, self.overlay.get_height() as i32);
+        self.surface.commit();
+    }
+    pub fn hide(&mut self) {
+        self.hidden = true;
+        self.surface.attach(None,0,0);
+        self.surface.commit();
     }
     pub fn commit(&mut self) {
         self.surface.commit();
     }
     pub fn new(overlay: List, surface: Main<WlSurface>, layer_surface: Main<ZwlrLayerSurfaceV1>, mempool: AutoMemPool) -> App {
-    	layer_surface.set_size(10, 10);
+    	layer_surface.set_size(overlay.get_width(), overlay.get_height());
+        surface.commit();
 
         layer_surface.quick_assign(move |layer_surface, event, mut app| match event {
             zwlr_layer_surface_v1::Event::Configure {
@@ -81,16 +88,18 @@ impl App {
                 width,
                 height,
             } => {
-                println!("ping");
                 let app = app.get::<App>().unwrap();
                 // Configuring the surface
                 layer_surface.ack_configure(serial);
                 layer_surface.set_size(width, height);
 
-                app.redraw();
+				app.configured = true;
+				if !app.hidden {
+                    app.redraw();
+				}
+                app.commit();
             }
             zwlr_layer_surface_v1::Event::Closed => {
-                println!("over");
                 let app = app.get::<App>().unwrap();
                 layer_surface.destroy();
                 app.surface.destroy();
@@ -99,7 +108,8 @@ impl App {
         });
         App {
             configured: false,
-            focused: 0,
+            hidden: false,
+            focused: Vec::new(),
             tag_list: Vec::new(),
             overlay,
             surface,
@@ -115,16 +125,23 @@ const BG2: u32 = 0xff_40_3e_3e;
 const YEL: u32 = 0xff_c6_aa_82;
 const GRN: u32 = 0xff_8D_98_7E;
 
-pub fn create_widget(focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
+pub fn create_widget(focused: &Vec<u32>, amount: u32, occupied: &Vec<u32>) -> List {
     // Creating the widget
-    let bg = Rectangle::square(50, Content::Pixel(BG0));
-    let bg1 = Rectangle::square(50, Content::Pixel(BG1));
-    let hl = Rectangle::square(10, Content::Pixel(YEL));
-    let hl2 = Rectangle::square(10, Content::Pixel(GRN));
-    let buttons: Vec<Button> = (0..10).map(|n| {
-        if n == focused {
+    let bg = Rectangle::square(60, Content::Pixel(BG0));
+    let bg1 = Rectangle::square(60, Content::Pixel(BG1));
+    let hl = Rectangle::square(20, Content::Pixel(YEL));
+    let hl2 = Rectangle::square(20, Content::Pixel(GRN));
+    let buttons: Vec<Button> = (0..amount).map(|n| {
+        if {
+            let mut focus = false;
+            for i in focused {
+                if i-1 == n { focus = true }
+                break;
+            }
+            focus
+        } {
             let mut focused_icon = Wbox::new(bg1);
-            focused_icon.add(hl).unwrap();
+            focused_icon.center(hl).unwrap();
             Button::new(focused_icon, |input| {
                 match input {
                     Input::MouseClick{ time, button, pressed } => {
@@ -135,10 +152,17 @@ pub fn create_widget(focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
             })
         } else {
             let mut occupied_icon = Wbox::new(bg1);
-            if n == n {
-                occupied_icon.add(hl2).unwrap();
+            if {
+                let mut focus = false;
+                for i in occupied {
+                    if i-1 == n { focus = true }
+                    break;
+                }
+                focus
+            } {
+                occupied_icon.center(hl2).unwrap();
             } else {
-                occupied_icon.add(bg1).unwrap();
+                occupied_icon.center(bg1).unwrap();
             }
             Button::new(occupied_icon, |input| {
                 match input {

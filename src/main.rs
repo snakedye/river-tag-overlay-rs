@@ -1,7 +1,7 @@
 mod wayland;
 mod app;
 mod environment;
-use snui::snui::*;
+use snui::wayland::input;
 use snui::widgets::{
     List,
     Button,
@@ -31,7 +31,9 @@ fn main() {
     let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
-    let mut widget = app::create_widget(0, 9, &Vec::new());
+    let mut widget = app::create_widget(&Vec::new(), 9, &Vec::new());
+
+    input::assign_pointer::<app::App>(&pointer);
 
 	let mut focused_tag = 0;
 	let surface = environment.get_surface();
@@ -39,10 +41,9 @@ fn main() {
         .layer_shell
         .as_ref()
         .expect("Compositor doesn't implement the LayerShell protocol")
-        .get_layer_surface(&surface, None, Layer::Top, String::from("test"));
+        .get_layer_surface(&surface, None, Layer::Top, String::from("overlay"));
 
 	for output in &environment.outputs {
-    	let surface_handle = surface.clone();
         let output_status = environment
             .status_manager
             .as_ref()
@@ -52,13 +53,9 @@ fn main() {
         output_status.quick_assign(move |_, event, mut app| match event {
             zriver_output_status_v1::Event::FocusedTags { tags } => {
                 let mut app = app.get::<app::App>().unwrap();
-                app.focused = tag(tags);
+                app.focused = base10(tags);
                 if app.configured {
-                    println!("pong");
                     app.redraw();
-                    app.commit();
-                } else {
-                    app.configured = true;
                 }
             }
             zriver_output_status_v1::Event::ViewTags { tags } => {
@@ -66,14 +63,13 @@ fn main() {
                 let len = tags.len();
                 for i in (0..len).into_iter().step_by(4) {
                     let buf: [u8; 4] = [tags[i], tags[i + 1], tags[i + 2], tags[i + 3]];
-                    app.tag_list.push(tag(u32::from_le_bytes(buf)));
+                    app.tag_list.append(&mut base10(u32::from_le_bytes(buf)));
                 }
             }
         });
 	}
 
     let mut app = app::App::new(widget, surface, layer_surface, mempool);
-    app.commit();
 
     loop {
         event_queue
@@ -90,18 +86,22 @@ fn main() {
 }
 
 
-fn tag(tagmask: u32) -> u32 {
-    let mut int = 0;
+fn base10(tagmask: u32) -> Vec<u32> {
+    let mut format = Vec::new();
+    let mut tag = 0;
     let mut current: u32;
     while {
-        current = 1 << int;
-        current < tagmask
+        current = 1 << tag;
+        current <= tagmask
     } {
-        int += 1;
         if current != tagmask && (tagmask / current) % 2 != 0 {
-            int = tag(tagmask - current);
+            format.push(tag);
+            let mut more = base10(tagmask - current);
+            format.append(&mut more);
             break;
-        }
+        } else if tag == 32 { break; }
+        tag += 1;
     }
-    int
+    format.push(tag);
+    format
 }
