@@ -11,6 +11,8 @@ use snui::wayland::buffer::Buffer;
 use smithay_client_toolkit::shm::{AutoMemPool, Format};
 use environment::Environment;
 use wayland_client::{Display, EventQueue, Main, Attached};
+use std::thread;
+use std::time::Duration;
 
 use crate::wayland::river_status_unstable_v1::{
     zriver_output_status_v1,
@@ -31,7 +33,7 @@ fn main() {
     let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
-    let mut widget = app::create_widget(&Vec::new(), 9, &Vec::new());
+    let mut widget = app::create_widget(0, 7, &Vec::new());
 
     input::assign_pointer::<app::App>(&pointer);
 
@@ -53,7 +55,7 @@ fn main() {
         output_status.quick_assign(move |_, event, mut app| match event {
             zriver_output_status_v1::Event::FocusedTags { tags } => {
                 let mut app = app.get::<app::App>().unwrap();
-                app.focused = base10(tags);
+                app.focused = tags;
                 if app.configured {
                     app.redraw();
                 }
@@ -63,7 +65,7 @@ fn main() {
                 let len = tags.len();
                 for i in (0..len).into_iter().step_by(4) {
                     let buf: [u8; 4] = [tags[i], tags[i + 1], tags[i + 2], tags[i + 3]];
-                    app.tag_list.append(&mut base10(u32::from_le_bytes(buf)));
+                    app.tag_list.push(u32::from_le_bytes(buf));
                 }
             }
         });
@@ -86,22 +88,3 @@ fn main() {
 }
 
 
-fn base10(tagmask: u32) -> Vec<u32> {
-    let mut format = Vec::new();
-    let mut tag = 0;
-    let mut current: u32;
-    while {
-        current = 1 << tag;
-        current <= tagmask
-    } {
-        if current != tagmask && (tagmask / current) % 2 != 0 {
-            format.push(tag);
-            let mut more = base10(tagmask - current);
-            format.append(&mut more);
-            break;
-        } else if tag == 32 { break; }
-        tag += 1;
-    }
-    format.push(tag);
-    format
-}

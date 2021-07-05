@@ -22,10 +22,16 @@ use smithay_client_toolkit::shm::AutoMemPool;
 use std::thread;
 use std::time::Duration;
 
+const BG0: u32 = 0xff_26_25_25;
+const BG1: u32 = 0xff_33_32_32;
+const BG2: u32 = 0xff_40_3e_3e;
+const YEL: u32 = 0xff_c6_aa_82;
+const GRN: u32 = 0xff_8D_98_7E;
+
 pub struct App {
     pub hidden: bool,
     pub configured: bool,
-    pub focused: Vec<u32>,
+    pub focused: u32,
     pub tag_list: Vec<u32>,
     pub overlay: List,
     pub mempool: AutoMemPool,
@@ -64,7 +70,7 @@ impl App {
         	self.overlay.get_width(),
         	self.overlay.get_height(),
     	);
-    	self.overlay = create_widget(&self.focused, 7, &self.tag_list);
+    	self.overlay = create_widget(self.focused, 7, &self.tag_list);
         buffer.composite(&self.overlay.to_surface(), 0, 0);
         buffer.attach(&self.surface,0,0);
         self.surface.damage(0, 0, self.overlay.get_width() as i32, self.overlay.get_height() as i32);
@@ -109,7 +115,7 @@ impl App {
         App {
             configured: false,
             hidden: false,
-            focused: Vec::new(),
+            focused: 0,
             tag_list: Vec::new(),
             overlay,
             surface,
@@ -119,28 +125,23 @@ impl App {
     }
 }
 
-const BG0: u32 = 0xff_26_25_25;
-const BG1: u32 = 0xff_33_32_32;
-const BG2: u32 = 0xff_40_3e_3e;
-const YEL: u32 = 0xff_c6_aa_82;
-const GRN: u32 = 0xff_8D_98_7E;
-
-pub fn create_widget(focused: &Vec<u32>, amount: u32, occupied: &Vec<u32>) -> List {
+pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
     // Creating the widget
     let bg = Rectangle::square(60, Content::Pixel(BG0));
-    let bg1 = Rectangle::square(60, Content::Pixel(BG1));
+    let bg1 = Rectangle::square(60, Content::Pixel(BG0));
+    let sl = Rectangle::square(26, Content::Pixel(BG2));
     let hl = Rectangle::square(20, Content::Pixel(YEL));
     let hl2 = Rectangle::square(20, Content::Pixel(GRN));
-    let buttons: Vec<Button> = (0..amount).map(|n| {
+
+    let mut current = 0;
+    let buttons: Vec<Button<Wbox>> = (0..amount).map(|n| {
         if {
-            let mut focus = false;
-            for i in focused {
-                if i-1 == n { focus = true }
-                break;
-            }
-            focus
+            current = 1 << n;
+            current == focused || (focused / current) % 2 != 0
         } {
+            focused -= current;
             let mut focused_icon = Wbox::new(bg1);
+            focused_icon.center(sl).unwrap();
             focused_icon.center(hl).unwrap();
             Button::new(focused_icon, |input| {
                 match input {
@@ -153,13 +154,15 @@ pub fn create_widget(focused: &Vec<u32>, amount: u32, occupied: &Vec<u32>) -> Li
         } else {
             let mut occupied_icon = Wbox::new(bg1);
             if {
-                let mut focus = false;
-                for i in occupied {
-                    if i-1 == n { focus = true }
-                    break;
+                let mut valid = false;
+                for tag in occupied {
+                    if 1 << n == *tag {
+                        valid = true;
+                    }
                 }
-                focus
+                valid
             } {
+                occupied_icon.center(sl).unwrap();
                 occupied_icon.center(hl2).unwrap();
             } else {
                 occupied_icon.center(bg1).unwrap();
@@ -177,7 +180,7 @@ pub fn create_widget(focused: &Vec<u32>, amount: u32, occupied: &Vec<u32>) -> Li
 
 	// Addind the created buttons to the bar
     let mut bar = List::new(Orientation::Horizontal, None);
-	bar.set_content(Content::Pixel(BG2));
+	bar.set_content(Content::Pixel(BG1));
 	bar.set_margin(10);
 	for b in buttons {
     	bar.add(b);
