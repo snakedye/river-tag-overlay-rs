@@ -1,13 +1,12 @@
+use crate::wayland::river_status_unstable_v1::{
+    zriver_seat_status_v1, zriver_status_manager_v1::ZriverStatusManagerV1,
+};
 use wayland_client::protocol::{
     wl_compositor::WlCompositor,
-    wl_output::{WlOutput, Event},
-    wl_shm::WlShm,
+    wl_output::{Event, WlOutput},
     wl_seat::WlSeat,
+    wl_shm::WlShm,
     wl_surface::WlSurface,
-};
-use crate::wayland::river_status_unstable_v1::{
-    zriver_seat_status_v1,
-    zriver_status_manager_v1::ZriverStatusManagerV1,
 };
 use wayland_client::{Display, EventQueue, GlobalManager, Main};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
@@ -64,7 +63,8 @@ impl Environment {
                     ZriverStatusManagerV1,
                     1,
                     |status_manager_obj: Main<ZriverStatusManagerV1>, mut globals: DispatchData| {
-                        globals.get::<Environment>().unwrap().status_manager = Some(status_manager_obj);
+                        globals.get::<Environment>().unwrap().status_manager =
+                            Some(status_manager_obj);
                     }
                 ],
                 [
@@ -87,7 +87,11 @@ impl Environment {
                     7,
                     |wl_seat: Main<WlSeat>, mut environment: DispatchData| {
                         wl_seat.quick_assign(move |_, _, _| {});
-                        environment.get::<Environment>().unwrap().seats.push(wl_seat);
+                        environment
+                            .get::<Environment>()
+                            .unwrap()
+                            .seats
+                            .push(wl_seat);
                     }
                 ],
                 [
@@ -102,12 +106,12 @@ impl Environment {
                     3,
                     |output: Main<WlOutput>, mut environment: DispatchData| {
                         let mut clock = 0;
-                        output.quick_assign( move |output, event, mut output_handle| {
+                        output.quick_assign(move |output, event, mut output_handle| {
                             let output_handle = output_handle.get::<Vec<Output>>().unwrap();
                             for output in output_handle {
                                 if !output.configured {
                                     match &event {
-                                        Event::Geometry{
+                                        Event::Geometry {
                                             x,
                                             y,
                                             physical_width,
@@ -119,7 +123,7 @@ impl Environment {
                                         } => {
                                             output.name = make.to_string();
                                         }
-                                        Event::Mode{
+                                        Event::Mode {
                                             flags,
                                             width,
                                             height,
@@ -128,7 +132,7 @@ impl Environment {
                                             output.width = *width;
                                             output.height = *height;
                                         }
-                                        Event::Scale{ factor } => {
+                                        Event::Scale { factor } => {
                                             output.scale = *factor;
                                         }
                                         _ => {}
@@ -137,10 +141,16 @@ impl Environment {
                                         output.configured = true;
                                     }
                                     clock += 1;
-                                } else { break }
+                                } else {
+                                    break;
+                                }
                             }
                         });
-                        environment.get::<Environment>().unwrap().outputs.push(Output::new(output));
+                        environment
+                            .get::<Environment>()
+                            .unwrap()
+                            .outputs
+                            .push(Output::new(output));
                     }
                 ]
             ),

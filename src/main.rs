@@ -1,15 +1,13 @@
-mod wayland;
 mod app;
 mod environment;
-use snui::wayland::input;
-use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
-use smithay_client_toolkit::shm::AutoMemPool;
+mod wayland;
 use environment::Environment;
-use wayland_client::{Display, EventQueue, Main, Attached};
+use smithay_client_toolkit::shm::AutoMemPool;
+use snui::wayland::input;
+use wayland_client::{Attached, Display, EventQueue, Main};
+use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 
-use crate::wayland::river_status_unstable_v1::{
-    zriver_output_status_v1,
-};
+use crate::wayland::river_status_unstable_v1::zriver_output_status_v1;
 
 fn main() {
     let display = Display::connect_to_env().unwrap();
@@ -28,14 +26,14 @@ fn main() {
 
     input::assign_pointer::<app::App>(&pointer);
 
-	let surface = environment.get_surface();
+    let surface = environment.get_surface();
     let layer_surface = environment
         .layer_shell
         .as_ref()
         .expect("Compositor doesn't implement the LayerShell protocol")
         .get_layer_surface(&surface, None, Layer::Top, String::from("overlay"));
 
-	for output in &environment.outputs {
+    for output in &environment.outputs {
         let output_status = environment
             .status_manager
             .as_ref()
@@ -59,7 +57,7 @@ fn main() {
                 }
             }
         });
-	}
+    }
 
     let mut app = app::App::new(widget, surface, layer_surface, mempool);
 
@@ -76,5 +74,3 @@ fn main() {
             .unwrap();
     }
 }
-
-
