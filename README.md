@@ -15,6 +15,6 @@ snui = { path="../snui" }
 ```
 for
 ```toml
-snui = { git="git@gitlab.com:snakedye/snui.git" }
+snui = { git="https://gitlab.com/snakedye/overlay.git" }
 ```
 
