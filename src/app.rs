@@ -19,14 +19,12 @@ use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
 use wayland_client::Main;
 use std::process::{Command};
 use smithay_client_toolkit::shm::AutoMemPool;
-use std::thread;
-use std::time::Duration;
 
 const BG0: u32 = 0xff_26_25_25;
 const BG1: u32 = 0xff_33_32_32;
 const BG2: u32 = 0xff_40_3e_3e;
 const YEL: u32 = 0xff_c6_aa_82;
-const GRN: u32 = 0xff_8D_98_7E;
+const GRN: u32 = 0xff_98_96_7E;
 
 pub struct App {
     pub hidden: bool,
@@ -95,7 +93,6 @@ impl App {
                 height,
             } => {
                 let app = app.get::<App>().unwrap();
-                // Configuring the surface
                 layer_surface.ack_configure(serial);
                 layer_surface.set_size(width, height);
 
@@ -126,15 +123,18 @@ impl App {
 }
 
 pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
-    // Creating the widget
     let bg = Rectangle::square(60, Content::Pixel(BG0));
     let bg1 = Rectangle::square(60, Content::Pixel(BG0));
-    let sl = Rectangle::square(26, Content::Pixel(BG2));
+    let sl = Rectangle::square(24, Content::Pixel(BG2));
     let hl = Rectangle::square(20, Content::Pixel(YEL));
     let hl2 = Rectangle::square(20, Content::Pixel(GRN));
 
-    let mut current = 0;
-    let buttons: Vec<Button<Wbox>> = (0..amount).map(|n| {
+    let mut bar = List::new(Orientation::Horizontal, None);
+	bar.set_content(Content::Pixel(BG1));
+	bar.set_margin(10);
+
+    let mut current;
+	for n in 0..amount {
         if {
             current = 1 << n;
             current == focused || (focused / current) % 2 != 0
@@ -143,14 +143,14 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             let mut focused_icon = Wbox::new(bg1);
             focused_icon.center(sl).unwrap();
             focused_icon.center(hl).unwrap();
-            Button::new(focused_icon, |input| {
+            bar.add(Button::new(focused_icon, |input| {
                 match input {
                     Input::MouseClick{ time, button, pressed } => {
                         println!("focused")
                     }
                     _ => {}
                 }
-            })
+            })).unwrap();
         } else {
             let mut occupied_icon = Wbox::new(bg1);
             if {
@@ -167,24 +167,16 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             } else {
                 occupied_icon.center(bg1).unwrap();
             }
-            Button::new(occupied_icon, |input| {
+            bar.add(Button::new(occupied_icon, |input| {
                 match input {
                     Input::MouseClick{ time, button, pressed } => {
                         println!("unfocused")
                     }
                     _ => {}
                 }
-            })
+            })).unwrap();
         }
-    }).collect();
-
-	// Addind the created buttons to the bar
-    let mut bar = List::new(Orientation::Horizontal, None);
-	bar.set_content(Content::Pixel(BG1));
-	bar.set_margin(10);
-	for b in buttons {
-    	bar.add(b);
-	}
+    }
     bar
 }
 

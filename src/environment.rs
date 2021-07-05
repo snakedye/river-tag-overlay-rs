@@ -102,7 +102,6 @@ impl Environment {
                     3,
                     |output: Main<WlOutput>, mut environment: DispatchData| {
                         let mut clock = 0;
-                        let mut index = 0;
                         output.quick_assign( move |output, event, mut output_handle| {
                             let output_handle = output_handle.get::<Vec<Output>>().unwrap();
                             for output in output_handle {

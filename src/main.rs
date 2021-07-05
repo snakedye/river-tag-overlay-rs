@@ -2,42 +2,32 @@ mod wayland;
 mod app;
 mod environment;
 use snui::wayland::input;
-use snui::widgets::{
-    List,
-    Button,
-};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
-use snui::wayland::buffer::Buffer;
-use smithay_client_toolkit::shm::{AutoMemPool, Format};
+use smithay_client_toolkit::shm::AutoMemPool;
 use environment::Environment;
 use wayland_client::{Display, EventQueue, Main, Attached};
-use std::thread;
-use std::time::Duration;
 
 use crate::wayland::river_status_unstable_v1::{
     zriver_output_status_v1,
-    zriver_seat_status_v1,
-    zriver_status_manager_v1::ZriverStatusManagerV1,
 };
 
 fn main() {
     let display = Display::connect_to_env().unwrap();
     let mut event_queue = display.create_event_queue();
-    let mut environment = Environment::new(&display, &mut event_queue);
+    let environment = Environment::new(&display, &mut event_queue);
 
     // Mempool
     let attached = Attached::from(environment.shm.clone().expect("No shared memory pool"));
-    let mut mempool = AutoMemPool::new(attached).unwrap();
+    let mempool = AutoMemPool::new(attached).unwrap();
 
     // Getting the pointer
     let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
-    let mut widget = app::create_widget(0, 7, &Vec::new());
+    let widget = app::create_widget(0, 7, &Vec::new());
 
     input::assign_pointer::<app::App>(&pointer);
 
-	let mut focused_tag = 0;
 	let surface = environment.get_surface();
     let layer_surface = environment
         .layer_shell
