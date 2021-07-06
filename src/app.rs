@@ -22,32 +22,78 @@ pub struct App {
     pub focused: u32,
     pub tag_list: Vec<u32>,
     pub overlay: List,
+    pub buffer: Surface,
     pub mempool: AutoMemPool,
     pub surface: Main<WlSurface>,
     pub layer_surface: Main<ZwlrLayerSurfaceV1>,
 }
 
-impl Drawable for App {
-    fn set_content(&mut self, content: Content) {
-        self.overlay.set_content(content);
-    }
+impl Geometry for App {
     fn get_width(&self) -> u32 {
         self.overlay.get_width()
     }
     fn get_height(&self) -> u32 {
         self.overlay.get_height()
     }
-    fn draw(&self, canvas: &mut Surface, x: u32, y: u32) {
-        self.overlay.draw(canvas, x, y);
+    fn get_location(&self) -> (u32, u32) {
+        (0, 0)
     }
-    fn contains(&mut self, x: u32, y: u32, event: Input) -> bool {
+    fn set_location(&mut self, _x: u32, _y: u32) { }
+    fn contains(&mut self, x: u32, y: u32, event: Input) -> Damage {
         self.overlay.contains(x, y, event)
+    }
+}
+
+impl Canvas for App {
+    fn paint(&self) {}
+    fn damage(&mut self, event: Damage) {
+        match event {
+            Damage::Area { surface, x, y } => {
+                self.buffer.composite(&surface, x, y);
+                let mut buffer = Buffer::new(
+                    self.overlay.get_width() as i32,
+                    self.overlay.get_height() as i32 + 10,
+                    (4 * self.overlay.get_width()) as i32,
+                    &mut self.mempool,
+                );
+                buffer.composite(&self.buffer, 0, 0);
+                buffer.attach(&self.surface, 0, 0);
+                self.surface.damage(
+                    x as i32,
+                    y as i32,
+                    surface.get_width() as i32,
+                    surface.get_height() as i32,
+                );
+                self.surface.commit();
+            }
+            Damage::Own => self.redraw(),
+            _ => {}
+        }
+    }
+    fn get(&self, _x: u32, _y: u32) -> Content { Content::Empty }
+    fn set(&mut self, _x: u32, _y: u32, _content: Content) { }
+    fn composite(&mut self, surface: &(impl Canvas + Geometry), x: u32, y: u32) {
+        let mut buffer = Buffer::new(
+            self.overlay.get_width() as i32,
+            self.overlay.get_height() as i32 + 10,
+            (4 * self.overlay.get_width()) as i32,
+            &mut self.mempool,
+        );
+        buffer.composite(surface, x, y);
+        buffer.attach(&self.surface, 0, 0);
+        self.surface.damage(
+            0,
+            0,
+            surface.get_width() as i32,
+            surface.get_height() as i32,
+        );
+        self.surface.commit();
     }
 }
 
 impl App {
     pub fn redraw(&mut self) {
-        self.hidden = true;
+        self.hidden = false;
         let mut buffer = Buffer::new(
             self.overlay.get_width() as i32,
             self.overlay.get_height() as i32 + 10,
@@ -57,7 +103,8 @@ impl App {
         self.layer_surface
             .set_size(self.overlay.get_width(), self.overlay.get_height());
         self.overlay = create_widget(self.focused, 7, &self.tag_list);
-        buffer.composite(&self.overlay.to_surface(), 0, 0);
+        self.buffer = to_surface(&self.overlay);
+        buffer.composite(&self.buffer, 0, 0);
         buffer.attach(&self.surface, 0, 0);
         self.surface.damage(
             0,
@@ -65,11 +112,6 @@ impl App {
             self.overlay.get_width() as i32,
             self.overlay.get_height() as i32,
         );
-        self.surface.commit();
-    }
-    pub fn hide(&mut self) {
-        self.hidden = true;
-        self.surface.attach(None, 0, 0);
         self.surface.commit();
     }
     pub fn commit(&mut self) {
@@ -111,6 +153,7 @@ impl App {
             configured: false,
             hidden: false,
             focused: 0,
+            buffer: Surface::empty(1, 1),
             tag_list: Vec::new(),
             overlay,
             surface,
@@ -122,7 +165,6 @@ impl App {
 
 pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
     let bg = Rectangle::square(60, Content::Pixel(BG0));
-    let bg1 = Rectangle::square(60, Content::Pixel(BG0));
     let sl = Rectangle::square(24, Content::Pixel(BG2));
     let hl = Rectangle::square(20, Content::Pixel(YEL));
     let hl2 = Rectangle::square(20, Content::Pixel(GRN));
@@ -138,22 +180,37 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             current == focused || (focused / current) % 2 != 0
         } {
             focused -= current;
-            let mut focused_icon = Wbox::new(bg1);
+            let mut focused_icon = Wbox::new(bg);
             focused_icon.center(sl).unwrap();
             focused_icon.center(hl).unwrap();
-            bar.add(Button::new(focused_icon, |input| match input {
+            bar.add(Button::new(focused_icon, |child, input| match input {
                 Input::MouseClick {
-                    time,
-                    button,
+                    time: _,
+                    button: _,
                     pressed,
                 } => {
-                    println!("focused")
+                    let (x, y) = child.get_location();
+                    if pressed {
+                        let size = child.get_width();
+                        let widget = Rectangle::square(size, Content::Pixel(GRN));
+                        Damage::Area{
+                            surface: to_surface(&widget),
+                            x,
+                            y
+                        }
+                    } else {
+                        Damage::Area{
+                            surface: to_surface(child),
+                            x,
+                            y
+                        }
+                    }
                 }
-                _ => {}
+                _ => Damage::None
             }))
             .unwrap();
         } else {
-            let mut occupied_icon = Wbox::new(bg1);
+            let mut occupied_icon = Wbox::new(bg);
             if {
                 let mut valid = false;
                 for tag in occupied {
@@ -166,25 +223,15 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                 occupied_icon.center(sl).unwrap();
                 occupied_icon.center(hl2).unwrap();
             } else {
-                occupied_icon.center(bg1).unwrap();
+                occupied_icon.center(bg).unwrap();
             }
-            bar.add(Button::new(occupied_icon, |input| match input {
-                Input::MouseClick {
-                    time,
-                    button,
-                    pressed,
-                } => {
-                    println!("unfocused")
-                }
-                _ => {}
-            }))
-            .unwrap();
+            bar.add(Button::new(occupied_icon, |_child, _input| {Damage::None})).unwrap();
         }
     }
     bar
 }
 
-fn run_command(value: String) {
+fn _run_command(value: String) {
     let mut string = value.split_whitespace();
     let mut command = Command::new(string.next().unwrap());
     command.args(string.collect::<Vec<&str>>());

@@ -4,7 +4,7 @@ mod wayland;
 use environment::Environment;
 use smithay_client_toolkit::shm::AutoMemPool;
 use snui::wayland::input;
-use wayland_client::{Attached, Display, EventQueue, Main};
+use wayland_client::{Attached, Display};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 
 use crate::wayland::river_status_unstable_v1::zriver_output_status_v1;
@@ -49,7 +49,7 @@ fn main() {
                 }
             }
             zriver_output_status_v1::Event::ViewTags { tags } => {
-                let mut app = app.get::<app::App>().unwrap();
+                let app = app.get::<app::App>().unwrap();
                 let len = tags.len();
                 for i in (0..len).into_iter().step_by(4) {
                     let buf: [u8; 4] = [tags[i], tags[i + 1], tags[i + 2], tags[i + 3]];

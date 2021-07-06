@@ -1,5 +1,5 @@
 use crate::wayland::river_status_unstable_v1::{
-    zriver_seat_status_v1, zriver_status_manager_v1::ZriverStatusManagerV1,
+    zriver_status_manager_v1::ZriverStatusManagerV1,
 };
 use wayland_client::protocol::{
     wl_compositor::WlCompositor,
@@ -106,28 +106,28 @@ impl Environment {
                     3,
                     |output: Main<WlOutput>, mut environment: DispatchData| {
                         let mut clock = 0;
-                        output.quick_assign(move |output, event, mut output_handle| {
+                        output.quick_assign(move |_output, event, mut output_handle| {
                             let output_handle = output_handle.get::<Vec<Output>>().unwrap();
                             for output in output_handle {
                                 if !output.configured {
                                     match &event {
                                         Event::Geometry {
-                                            x,
-                                            y,
-                                            physical_width,
-                                            physical_height,
-                                            subpixel,
+                                            x: _,
+                                            y: _,
+                                            physical_width: _,
+                                            physical_height: _,
+                                            subpixel: _,
                                             make,
-                                            model,
-                                            transform,
+                                            model: _,
+                                            transform: _,
                                         } => {
                                             output.name = make.to_string();
                                         }
                                         Event::Mode {
-                                            flags,
+                                            flags: _,
                                             width,
                                             height,
-                                            refresh,
+                                            refresh: _,
                                         } => {
                                             output.width = *width;
                                             output.height = *height;
