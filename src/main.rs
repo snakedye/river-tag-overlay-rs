@@ -3,7 +3,8 @@ mod environment;
 mod wayland;
 use environment::Environment;
 use smithay_client_toolkit::shm::AutoMemPool;
-use snui::wayland::input;
+use snui::wayland::utils;
+use snui::snui::Canvas;
 use wayland_client::{Attached, Display};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 
@@ -24,7 +25,6 @@ fn main() {
     // Creating widget
     let widget = app::create_widget(0, 7, &Vec::new());
 
-    input::assign_pointer::<app::App>(&pointer);
 
     let surface = environment.get_surface();
     let layer_surface = environment
@@ -32,6 +32,9 @@ fn main() {
         .as_ref()
         .expect("Compositor doesn't implement the LayerShell protocol")
         .get_layer_surface(&surface, None, Layer::Top, String::from("overlay"));
+
+    utils::assign_pointer::<app::App>(&pointer);
+    utils::assign_layer_surface::<app::App>(&layer_surface);
 
     for output in &environment.outputs {
         let output_status = environment
@@ -45,7 +48,7 @@ fn main() {
                 let mut app = app.get::<app::App>().unwrap();
                 app.focused = tags;
                 if app.configured {
-                    app.redraw();
+                    app.display();
                 }
             }
             zriver_output_status_v1::Event::ViewTags { tags } => {

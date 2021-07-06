@@ -6,8 +6,9 @@ use snui::widgets::{Button, List, Rectangle, Wbox};
 use std::process::Command;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Main;
+use snui::wayland::utils::LayerSurface;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
-    zwlr_layer_surface_v1, zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
+    zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
 };
 
 const BG0: u32 = 0xff_26_25_25;
@@ -44,8 +45,36 @@ impl Geometry for App {
     }
 }
 
+impl LayerSurface for App {
+    fn get_surface(&self) -> &Main<WlSurface> {
+        &self.surface
+    }
+    fn set_size(&mut self, _x: u32, _y: u32) { }
+}
+
 impl Canvas for App {
-    fn paint(&self) {}
+    fn display(&mut self) {
+        self.configured = true;
+        let mut buffer = Buffer::new(
+            self.overlay.get_width() as i32,
+            self.overlay.get_height() as i32 + 10,
+            (4 * self.overlay.get_width()) as i32,
+            &mut self.mempool,
+        );
+        self.layer_surface
+            .set_size(self.overlay.get_width(), self.overlay.get_height());
+        self.overlay = create_widget(self.focused, 7, &self.tag_list);
+        self.buffer = to_surface(&self.overlay);
+        buffer.composite(&self.buffer, 0, 0);
+        buffer.attach(&self.surface, 0, 0);
+        self.surface.damage(
+            0,
+            0,
+            self.overlay.get_width() as i32,
+            self.overlay.get_height() as i32,
+        );
+        self.surface.commit();
+    }
     fn damage(&mut self, event: Damage) {
         match event {
             Damage::Area { surface, x, y } => {
@@ -66,7 +95,7 @@ impl Canvas for App {
                 );
                 self.surface.commit();
             }
-            Damage::Own => self.redraw(),
+            Damage::Own => self.display(),
             _ => {}
         }
     }
@@ -92,31 +121,6 @@ impl Canvas for App {
 }
 
 impl App {
-    pub fn redraw(&mut self) {
-        self.hidden = false;
-        let mut buffer = Buffer::new(
-            self.overlay.get_width() as i32,
-            self.overlay.get_height() as i32 + 10,
-            (4 * self.overlay.get_width()) as i32,
-            &mut self.mempool,
-        );
-        self.layer_surface
-            .set_size(self.overlay.get_width(), self.overlay.get_height());
-        self.overlay = create_widget(self.focused, 7, &self.tag_list);
-        self.buffer = to_surface(&self.overlay);
-        buffer.composite(&self.buffer, 0, 0);
-        buffer.attach(&self.surface, 0, 0);
-        self.surface.damage(
-            0,
-            0,
-            self.overlay.get_width() as i32,
-            self.overlay.get_height() as i32,
-        );
-        self.surface.commit();
-    }
-    pub fn commit(&mut self) {
-        self.surface.commit();
-    }
     pub fn new(
         overlay: List,
         surface: Main<WlSurface>,
@@ -125,30 +129,6 @@ impl App {
     ) -> App {
         layer_surface.set_size(overlay.get_width(), overlay.get_height());
         surface.commit();
-
-        layer_surface.quick_assign(move |layer_surface, event, mut app| match event {
-            zwlr_layer_surface_v1::Event::Configure {
-                serial,
-                width,
-                height,
-            } => {
-                let app = app.get::<App>().unwrap();
-                layer_surface.ack_configure(serial);
-                layer_surface.set_size(width, height);
-
-                app.configured = true;
-                if !app.hidden {
-                    app.redraw();
-                }
-                app.commit();
-            }
-            zwlr_layer_surface_v1::Event::Closed => {
-                let app = app.get::<App>().unwrap();
-                layer_surface.destroy();
-                app.surface.destroy();
-            }
-            _ => {}
-        });
         App {
             configured: false,
             hidden: false,
@@ -181,8 +161,8 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
         } {
             focused -= current;
             let mut focused_icon = Wbox::new(bg);
-            focused_icon.center(sl).unwrap();
-            focused_icon.center(hl).unwrap();
+            focused_icon.add(sl).unwrap();
+            focused_icon.add(hl).unwrap();
             bar.add(Button::new(focused_icon, |child, input| match input {
                 Input::MouseClick {
                     time: _,
@@ -192,7 +172,7 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                     let (x, y) = child.get_location();
                     if pressed {
                         let size = child.get_width();
-                        let widget = Rectangle::square(size, Content::Pixel(GRN));
+                        let widget = Rectangle::square(size, Content::Pixel(YEL));
                         Damage::Area{
                             surface: to_surface(&widget),
                             x,
@@ -220,12 +200,12 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                 }
                 valid
             } {
-                occupied_icon.center(sl).unwrap();
-                occupied_icon.center(hl2).unwrap();
+                occupied_icon.add(sl).unwrap();
+                occupied_icon.add(hl2).unwrap();
             } else {
-                occupied_icon.center(bg).unwrap();
+                occupied_icon.add(bg).unwrap();
             }
-            bar.add(Button::new(occupied_icon, |_child, _input| {Damage::None})).unwrap();
+            bar.add(occupied_icon).unwrap();
         }
     }
     bar
