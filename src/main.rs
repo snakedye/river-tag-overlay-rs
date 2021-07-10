@@ -25,7 +25,6 @@ fn main() {
     // Creating widget
     let widget = app::create_widget(0, 7, &Vec::new());
 
-
     let surface = environment.get_surface();
     let layer_surface = environment
         .layer_shell

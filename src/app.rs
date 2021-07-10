@@ -2,7 +2,7 @@ use smithay_client_toolkit::shm::AutoMemPool;
 use snui::snui::*;
 use snui::wayland::*;
 use snui::widgets::*;
-use snui::widgets::{Button, List, Rectangle, Wbox};
+use snui::widgets::{Button, ListBox, Rectangle, Node};
 use std::process::Command;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Main;
@@ -22,7 +22,7 @@ pub struct App {
     pub configured: bool,
     pub focused: u32,
     pub tag_list: Vec<u32>,
-    pub overlay: List,
+    pub overlay: ListBox,
     pub buffer: Surface,
     pub mempool: AutoMemPool,
     pub surface: Main<WlSurface>,
@@ -36,12 +36,8 @@ impl Geometry for App {
     fn get_height(&self) -> u32 {
         self.overlay.get_height()
     }
-    fn get_location(&self) -> (u32, u32) {
-        (0, 0)
-    }
-    fn set_location(&mut self, _x: u32, _y: u32) { }
-    fn contains(&mut self, x: u32, y: u32, event: Input) -> Damage {
-        self.overlay.contains(x, y, event)
+    fn contains(&mut self, widget_x: u32, widget_y: u32, x: u32, y: u32, event: Input) -> Damage {
+        self.overlay.contains(widget_x, widget_y, x, y, event)
     }
 }
 
@@ -122,7 +118,7 @@ impl Canvas for App {
 
 impl App {
     pub fn new(
-        overlay: List,
+        overlay: ListBox,
         surface: Main<WlSurface>,
         layer_surface: Main<ZwlrLayerSurfaceV1>,
         mempool: AutoMemPool,
@@ -143,13 +139,12 @@ impl App {
     }
 }
 
-pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List {
+pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> ListBox {
     let bg = Rectangle::square(60, Content::Pixel(BG0));
-    let sl = Rectangle::square(24, Content::Pixel(BG2));
     let hl = Rectangle::square(20, Content::Pixel(YEL));
     let hl2 = Rectangle::square(20, Content::Pixel(GRN));
 
-    let mut bar = List::new(Orientation::Horizontal, None);
+    let mut bar = ListBox::new(Orientation::Horizontal);
     bar.set_content(Content::Pixel(BG1));
     bar.set_margin(10);
 
@@ -160,25 +155,23 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             current == focused || (focused / current) % 2 != 0
         } {
             focused -= current;
-            let mut focused_icon = Wbox::new(bg);
-            focused_icon.add(sl).unwrap();
-            focused_icon.add(hl).unwrap();
-            bar.add(Button::new(focused_icon, |child, input| match input {
+            let mut focused_icon = Node::new(bg);
+            focused_icon.center(border(hl, 3, Content::Pixel(BG2))).unwrap();
+            bar.add(Button::new(focused_icon, move |child, x, y, input| match input {
                 Input::MouseClick {
                     time: _,
                     button: _,
                     pressed,
                 } => {
-                    let (x, y) = child.get_location();
                     if pressed {
-                        let size = child.get_width();
-                        let widget = Rectangle::square(size, Content::Pixel(YEL));
+                        child.set_content(Content::Pixel(GRN));
                         Damage::Area{
-                            surface: to_surface(&widget),
+                            surface: to_surface(child),
                             x,
                             y
                         }
                     } else {
+                        child.set_content(Content::Pixel(BG0));
                         Damage::Area{
                             surface: to_surface(child),
                             x,
@@ -190,7 +183,7 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             }))
             .unwrap();
         } else {
-            let mut occupied_icon = Wbox::new(bg);
+            let mut occupied_icon = Node::new(bg);
             if {
                 let mut valid = false;
                 for tag in occupied {
@@ -200,10 +193,9 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                 }
                 valid
             } {
-                occupied_icon.add(sl).unwrap();
-                occupied_icon.add(hl2).unwrap();
+                occupied_icon.center(border(hl2, 2, Content::Pixel(BG2))).unwrap();
             } else {
-                occupied_icon.add(bg).unwrap();
+                occupied_icon.center(bg).unwrap();
             }
             bar.add(occupied_icon).unwrap();
         }
@@ -211,7 +203,7 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
     bar
 }
 
-fn _run_command(value: String) {
+fn run_command(value: String) {
     let mut string = value.split_whitespace();
     let mut command = Command::new(string.next().unwrap());
     command.args(string.collect::<Vec<&str>>());
