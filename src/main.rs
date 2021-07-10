@@ -2,7 +2,7 @@ mod app;
 mod environment;
 mod wayland;
 use environment::Environment;
-use smithay_client_toolkit::shm::AutoMemPool;
+use smithay_client_toolkit::shm::MemPool;
 use snui::wayland::utils;
 use snui::snui::Canvas;
 use wayland_client::{Attached, Display};
@@ -17,14 +17,13 @@ fn main() {
 
     // Mempool
     let attached = Attached::from(environment.shm.clone().expect("No shared memory pool"));
-    let mempool = AutoMemPool::new(attached).unwrap();
+    let mempool = MemPool::new(attached, |_| {}).unwrap();
 
     // Getting the pointer
-    let pointer = environment.seats[0].get_pointer();
+    // let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
     let widget = app::create_widget(0, 7, &Vec::new());
-
 
     let surface = environment.get_surface();
     let layer_surface = environment
@@ -33,8 +32,8 @@ fn main() {
         .expect("Compositor doesn't implement the LayerShell protocol")
         .get_layer_surface(&surface, None, Layer::Top, String::from("overlay"));
 
-    utils::assign_pointer::<app::App>(&pointer);
-    utils::assign_layer_surface::<app::App>(&layer_surface);
+    // utils::assign_pointer::<app::App>(&pointer);
+    // utils::assign_layer_surface::<app::App>(&layer_surface);
 
     for output in &environment.outputs {
         let output_status = environment
@@ -48,7 +47,7 @@ fn main() {
                 let mut app = app.get::<app::App>().unwrap();
                 app.focused = tags;
                 if app.configured {
-                    app.display();
+                    app.redraw();
                 }
             }
             zriver_output_status_v1::Event::ViewTags { tags } => {
