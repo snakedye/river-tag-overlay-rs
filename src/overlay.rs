@@ -4,7 +4,7 @@ use snui::wayland::buffer::*;
 use snui::widgets::*;
 use snui::widgets::{Button, ListBox, Rectangle, Node};
 use std::process::Command;
-use smithay_client_toolkit::shm::MemPool;
+use smithay_client_toolkit::shm::AutoMemPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Main;
 use snui::wayland::app::LayerSurface;
@@ -61,6 +61,8 @@ impl LayerSurface for App {
         let mut buffer = Buffer::new(
             self.overlay.get_width() as i32,
             self.overlay.get_height() as i32,
+            (4 * self.overlay.get_width()) as i32,
+            &mut self.mempool
         );
         self.layer_surface
             .set_size(self.overlay.get_width(), self.overlay.get_height());

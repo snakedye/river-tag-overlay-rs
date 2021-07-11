@@ -3,13 +3,7 @@ mod wayland;
 mod environment;
 use snui::wayland::app;
 use environment::Environment;
-<<<<<<< HEAD
-use smithay_client_toolkit::shm::MemPool;
-use snui::wayland::utils;
-use snui::snui::Canvas;
-=======
 use snui::wayland::app::LayerSurface;
->>>>>>> automempool
 use wayland_client::{Attached, Display};
 use smithay_client_toolkit::shm::AutoMemPool;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
@@ -26,7 +20,7 @@ fn main() {
     let mempool = MemPool::new(attached, |_| {}).unwrap();
 
     // Getting the pointer
-    // let pointer = environment.seats[0].get_pointer();
+    let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
     let widget = overlay::create_widget(0, 7, &Vec::new());
