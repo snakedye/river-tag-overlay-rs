@@ -6,7 +6,7 @@ use snui::widgets::{Button, ListBox, Rectangle, Node};
 use std::process::Command;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Main;
-use snui::wayland::utils::LayerSurface;
+use snui::wayland::app::LayerSurface;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
     zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
 };
@@ -54,9 +54,6 @@ impl LayerSurface for App {
     fn resize(&mut self, width: u32, height: u32) {
         self.mempool.resize((width*height) as usize).unwrap();
     }
-}
-
-impl Canvas for App {
     fn display(&mut self) {
         self.configured = true;
         let mut buffer = Buffer::new(
@@ -79,6 +76,9 @@ impl Canvas for App {
         );
         self.surface.commit();
     }
+}
+
+impl Canvas for App {
     fn damage(&mut self, event: Damage) {
         match event {
             Damage::Area { surface, x, y } => {
