@@ -17,13 +17,19 @@ const BG2: u32 = 0xff_40_3e_3e;
 const YEL: u32 = 0xff_c6_aa_82;
 const GRN: u32 = 0xff_98_96_7E;
 
+fn _run_command(value: String) {
+    let mut string = value.split_whitespace();
+    let mut command = Command::new(string.next().unwrap());
+    command.args(string.collect::<Vec<&str>>());
+    command.spawn().expect("Error");
+}
+
 pub struct App {
-    pub hidden: bool,
     pub configured: bool,
     pub focused: u32,
     pub tag_list: Vec<u32>,
     pub overlay: ListBox,
-    pub buffer: Surface,
+    pub pixmap: Surface,
     pub mempool: AutoMemPool,
     pub surface: Main<WlSurface>,
     pub layer_surface: Main<ZwlrLayerSurfaceV1>,
@@ -45,7 +51,9 @@ impl LayerSurface for App {
     fn get_surface(&self) -> &Main<WlSurface> {
         &self.surface
     }
-    fn set_size(&mut self, _x: u32, _y: u32) { }
+    fn resize(&mut self, width: u32, height: u32) {
+        self.mempool.resize((width*height) as usize).unwrap();
+    }
 }
 
 impl Canvas for App {
@@ -60,8 +68,8 @@ impl Canvas for App {
         self.layer_surface
             .set_size(self.overlay.get_width(), self.overlay.get_height());
         self.overlay = create_widget(self.focused, 7, &self.tag_list);
-        self.buffer = to_surface(&self.overlay);
-        buffer.composite(&self.buffer, 0, 0);
+        self.pixmap = to_surface(&self.overlay);
+        buffer.composite(&self.pixmap, 0, 0);
         buffer.attach(&self.surface, 0, 0);
         self.surface.damage(
             0,
@@ -74,14 +82,14 @@ impl Canvas for App {
     fn damage(&mut self, event: Damage) {
         match event {
             Damage::Area { surface, x, y } => {
-                self.buffer.composite(&surface, x, y);
+                self.composite(&surface, x, y);
                 let mut buffer = Buffer::new(
                     self.overlay.get_width() as i32,
                     self.overlay.get_height() as i32 + 10,
                     (4 * self.overlay.get_width()) as i32,
                     &mut self.mempool,
                 );
-                buffer.composite(&self.buffer, 0, 0);
+                buffer.composite(&self.pixmap, 0, 0);
                 buffer.attach(&self.surface, 0, 0);
                 self.surface.damage(
                     x as i32,
@@ -98,21 +106,7 @@ impl Canvas for App {
     fn get(&self, _x: u32, _y: u32) -> Content { Content::Empty }
     fn set(&mut self, _x: u32, _y: u32, _content: Content) { }
     fn composite(&mut self, surface: &(impl Canvas + Geometry), x: u32, y: u32) {
-        let mut buffer = Buffer::new(
-            self.overlay.get_width() as i32,
-            self.overlay.get_height() as i32 + 10,
-            (4 * self.overlay.get_width()) as i32,
-            &mut self.mempool,
-        );
-        buffer.composite(surface, x, y);
-        buffer.attach(&self.surface, 0, 0);
-        self.surface.damage(
-            0,
-            0,
-            surface.get_width() as i32,
-            surface.get_height() as i32,
-        );
-        self.surface.commit();
+        self.pixmap.composite(surface, x, y);
     }
 }
 
@@ -127,9 +121,8 @@ impl App {
         surface.commit();
         App {
             configured: false,
-            hidden: false,
             focused: 0,
-            buffer: Surface::empty(1, 1),
+            pixmap: Surface::empty(0, 0),
             tag_list: Vec::new(),
             overlay,
             surface,
@@ -201,11 +194,4 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
         }
     }
     bar
-}
-
-fn run_command(value: String) {
-    let mut string = value.split_whitespace();
-    let mut command = Command::new(string.next().unwrap());
-    command.args(string.collect::<Vec<&str>>());
-    command.spawn().expect("Error");
 }
