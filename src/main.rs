@@ -1,11 +1,11 @@
+mod environment;
 mod overlay;
 mod wayland;
-mod environment;
-use snui::wayland::app;
 use environment::Environment;
+use smithay_client_toolkit::shm::AutoMemPool;
+use snui::wayland::app;
 use snui::wayland::app::LayerSurface;
 use wayland_client::{Attached, Display};
-use smithay_client_toolkit::shm::AutoMemPool;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 
 use crate::wayland::river_status_unstable_v1::zriver_output_status_v1;
@@ -17,13 +17,13 @@ fn main() {
 
     // Mempool
     let attached = Attached::from(environment.shm.clone().expect("No shared memory pool"));
-    let mempool = MemPool::new(attached, |_| {}).unwrap();
+    let mempool = AutoMemPool::new(attached).unwrap();
 
     // Getting the pointer
     let pointer = environment.seats[0].get_pointer();
 
     // Creating widget
-    let widget = overlay::create_widget(0, 7, &Vec::new());
+    let widget = overlay::create_widget(1, 4, &vec![]);
 
     let surface = environment.get_surface();
     let layer_surface = environment

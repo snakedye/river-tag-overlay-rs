@@ -1,17 +1,13 @@
-use snui::snui::*;
-use snui::wayland::*;
-use snui::wayland::buffer::*;
-use snui::widgets::*;
-use snui::widgets::{Button, ListBox, Rectangle, Node};
-use std::process::Command;
 use smithay_client_toolkit::shm::AutoMemPool;
+use snui::snui::*;
+use snui::wayland::app::LayerSurface;
+use snui::wayland::*;
+use snui::widgets::*;
+use snui::widgets::{Button, ListBox, Node, Rectangle};
+use std::process::Command;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Main;
-use snui::wayland::app::LayerSurface;
-use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
-    zwlr_layer_surface_v1,
-    zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
-};
+use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
 const BG0: u32 = 0xff_26_25_25;
 const BG1: u32 = 0xff_33_32_32;
@@ -54,15 +50,15 @@ impl LayerSurface for App {
         &self.surface
     }
     fn resize(&mut self, width: u32, height: u32) {
-        self.mempool.resize((width*height) as usize).unwrap();
+        self.mempool.resize((width * height) as usize).unwrap();
     }
     fn display(&mut self) {
         self.configured = true;
         let mut buffer = Buffer::new(
             self.overlay.get_width() as i32,
-            self.overlay.get_height() as i32,
+            self.overlay.get_height() as i32 + 10,
             (4 * self.overlay.get_width()) as i32,
-            &mut self.mempool
+            &mut self.mempool,
         );
         self.layer_surface
             .set_size(self.overlay.get_width(), self.overlay.get_height());
@@ -87,7 +83,7 @@ impl Canvas for App {
                 self.composite(&surface, x, y);
                 let mut buffer = Buffer::new(
                     self.overlay.get_width() as i32,
-                    self.overlay.get_height() as i32 + 10,
+                    self.overlay.get_height() as i32 + 50,
                     (4 * self.overlay.get_width()) as i32,
                     &mut self.mempool,
                 );
@@ -101,14 +97,21 @@ impl Canvas for App {
                 );
                 self.surface.commit();
             }
-            Damage::Own => self.redraw(),
+            Damage::Own => self.display(),
             _ => {}
         }
     }
-    fn get(&self, _x: u32, _y: u32) -> Content { Content::Empty }
-    fn set(&mut self, _x: u32, _y: u32, _content: Content) { }
     fn composite(&mut self, surface: &(impl Canvas + Geometry), x: u32, y: u32) {
         self.pixmap.composite(surface, x, y);
+    }
+    fn get_buf(&self) -> &[u8] {
+        self.pixmap.get_buf()
+    }
+    fn get_mut_buf(&mut self) -> &mut [u8] {
+        self.pixmap.get_mut_buf()
+    }
+    fn size(&self) -> usize {
+        (self.get_width() * self.get_height() * 4) as usize
     }
 }
 
@@ -151,34 +154,37 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
         } {
             focused -= current;
             let mut focused_icon = Node::new(bg);
-            focused_icon.center(border(hl, 3, Content::Pixel(BG2))).unwrap();
-            bar.add(Button::new(focused_icon, move |child, x, y, input| match input {
-                Input::MouseClick {
-                    time: _,
-                    button: _,
-                    pressed,
-                } => {
-                    if pressed {
-                        child.set_content(Content::Pixel(GRN));
-                        Damage::Area{
-                            surface: to_surface(child),
-                            x,
-                            y
-                        }
-                    } else {
-                        child.set_content(Content::Pixel(BG0));
-                        Damage::Area{
-                            surface: to_surface(child),
-                            x,
-                            y
+            focused_icon
+                .center(border(hl, 3, Content::Pixel(BG2)))
+                .unwrap();
+            bar.add(Button::new(
+                focused_icon,
+                move |child, x, y, input| match input {
+                    Input::MouseClick {
+                        time: _,
+                        button: _,
+                        pressed,
+                    } => {
+                        if pressed {
+                            child.set_content(Content::Pixel(GRN));
+                            Damage::Area {
+                                surface: to_surface(child),
+                                x,
+                                y,
+                            }
+                        } else {
+                            child.set_content(Content::Pixel(BG0));
+                            Damage::Area {
+                                surface: to_surface(child),
+                                x,
+                                y,
+                            }
                         }
                     }
-                }
-                _ => {
-                    Damage::None
-                }
-            })).unwrap();
-            bar.add(focused_icon).unwrap();
+                    _ => Damage::None,
+                },
+            ))
+            .unwrap();
         } else {
             let mut occupied_icon = Node::new(bg);
             if {
@@ -190,7 +196,9 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                 }
                 valid
             } {
-                occupied_icon.center(border(hl2, 2, Content::Pixel(BG2))).unwrap();
+                occupied_icon
+                    .center(border(hl2, 2, Content::Pixel(BG2)))
+                    .unwrap();
             } else {
                 occupied_icon.center(bg).unwrap();
             }

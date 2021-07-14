@@ -1,6 +1,4 @@
-use crate::wayland::river_status_unstable_v1::{
-    zriver_status_manager_v1::ZriverStatusManagerV1,
-};
+use crate::wayland::river_status_unstable_v1::zriver_status_manager_v1::ZriverStatusManagerV1;
 use wayland_client::protocol::{
     wl_compositor::WlCompositor,
     wl_output::{Event, WlOutput},
