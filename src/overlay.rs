@@ -77,30 +77,6 @@ impl LayerSurface for App {
 }
 
 impl Canvas for App {
-    fn damage(&mut self, event: Damage) {
-        match event {
-            Damage::Area { surface, x, y } => {
-                self.composite(&surface, x, y);
-                let mut buffer = Buffer::new(
-                    self.overlay.get_width() as i32,
-                    self.overlay.get_height() as i32 + 50,
-                    (4 * self.overlay.get_width()) as i32,
-                    &mut self.mempool,
-                );
-                buffer.composite(&self.pixmap, 0, 0);
-                buffer.attach(&self.surface, 0, 0);
-                self.surface.damage(
-                    x as i32,
-                    y as i32,
-                    surface.get_width() as i32,
-                    surface.get_height() as i32,
-                );
-                self.surface.commit();
-            }
-            Damage::Own => self.display(),
-            _ => {}
-        }
-    }
     fn composite(&mut self, surface: &(impl Canvas + Geometry), x: u32, y: u32) {
         self.pixmap.composite(surface, x, y);
     }
