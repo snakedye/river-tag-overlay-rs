@@ -1,5 +1,5 @@
 use smithay_client_toolkit::shm::AutoMemPool;
-use snui::snui::*;
+use snui::*;
 use snui::wayland::app::LayerSurface;
 use snui::wayland::*;
 use snui::widgets::*;
@@ -27,7 +27,7 @@ pub struct App {
     pub focused: u32,
     pub tag_list: Vec<u32>,
     pub overlay: ListBox,
-    pub pixmap: Surface,
+    pub pixmap: [u8; 0],
     pub mempool: AutoMemPool,
     pub surface: Main<WlSurface>,
     pub layer_surface: Main<ZwlrLayerSurfaceV1>,
@@ -52,20 +52,11 @@ impl LayerSurface for App {
     fn resize(&mut self, width: u32, height: u32) {
         self.mempool.resize((width * height) as usize).unwrap();
     }
-    fn display(&mut self) {
-        self.configured = true;
-        let mut buffer = Buffer::new(
-            self.overlay.get_width() as i32,
-            self.overlay.get_height() as i32 + 10,
-            (4 * self.overlay.get_width()) as i32,
-            &mut self.mempool,
-        );
-        self.layer_surface
-            .set_size(self.overlay.get_width(), self.overlay.get_height());
-        self.overlay = create_widget(self.focused, 7, &self.tag_list);
-        self.pixmap = to_surface(&self.overlay);
-        buffer.composite(&self.pixmap, 0, 0);
-        buffer.attach(&self.surface, 0, 0);
+    fn show(&mut self) {
+        if !self.configured {
+            self.reload();
+            self.configured = true;
+        }
         self.surface.damage(
             0,
             0,
@@ -78,13 +69,27 @@ impl LayerSurface for App {
 
 impl Canvas for App {
     fn composite(&mut self, surface: &(impl Canvas + Geometry), x: u32, y: u32) {
-        self.pixmap.composite(surface, x, y);
+        let mut buffer = Buffer::new(
+            self.overlay.get_width() as i32,
+            self.overlay.get_height() as i32,
+            (4 * self.overlay.get_width()) as i32,
+            &mut self.mempool,
+        );
+        buffer.composite(surface, x, y);
+        buffer.attach(&self.surface, 0, 0);
+        self.surface.damage(
+            x as i32,
+            y as i32,
+            surface.get_width() as i32,
+            surface.get_height() as i32,
+        );
+        self.surface.commit();
     }
     fn get_buf(&self) -> &[u8] {
-        self.pixmap.get_buf()
+        &self.pixmap
     }
     fn get_mut_buf(&mut self) -> &mut [u8] {
-        self.pixmap.get_mut_buf()
+        &mut self.pixmap
     }
     fn size(&self) -> usize {
         (self.get_width() * self.get_height() * 4) as usize
@@ -103,7 +108,7 @@ impl App {
         App {
             configured: false,
             focused: 0,
-            pixmap: Surface::empty(0, 0),
+            pixmap: [],
             tag_list: Vec::new(),
             overlay,
             surface,
@@ -111,6 +116,18 @@ impl App {
             mempool,
         }
     }
+    pub fn reload(&mut self) {
+        let width = self.overlay.get_width();
+        let mut buffer = Buffer::new(
+            self.overlay.get_width() as i32,
+            self.overlay.get_height() as i32,
+            (4 * self.overlay.get_width()) as i32,
+            &mut self.mempool,
+        );
+        self.overlay = create_widget(self.focused, 7, &self.tag_list);
+        self.overlay.draw(buffer.get_mut_buf(), width, 0, 0);
+        buffer.attach(&self.surface, 0, 0);
+   }
 }
 
 pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> ListBox {
@@ -131,7 +148,7 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
             focused -= current;
             let mut focused_icon = Node::new(bg);
             focused_icon
-                .center(border(hl, 3, Content::Pixel(BG2)))
+                .center(border(hl, 2, Content::Pixel(BG2)))
                 .unwrap();
             bar.add(Button::new(
                 focused_icon,

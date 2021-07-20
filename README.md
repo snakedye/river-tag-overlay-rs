@@ -13,8 +13,8 @@ If you still want to use it replace
 ```toml
 snui = { path="../snui" }
 ```
-for
+by
 ```toml
-snui = { git="https://gitlab.com/snakedye/overlay.git" }
+snui = { git="https://gitlab.com/snakedye/snui.git" }
 ```
 
