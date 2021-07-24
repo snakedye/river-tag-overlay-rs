@@ -139,9 +139,9 @@ fn main() {
     }
 }
 pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> ListBox {
-    let bg = Rectangle::square(60, Content::Pixel(BG0));
-    let hl = Rectangle::square(20, Content::Pixel(YEL));
-    let hl2 = Rectangle::square(20, Content::Pixel(GRN));
+    let bg = Rectangle::square(50, Content::Pixel(BG0));
+    let hl = Rectangle::square(16, Content::Pixel(YEL));
+    let hl2 = Rectangle::square(16, Content::Pixel(GRN));
 
     let mut bar = ListBox::new(Orientation::Horizontal);
     bar.set_content(Content::Pixel(BG1));
@@ -167,7 +167,7 @@ pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> List
                         pressed,
                     } => {
                         if pressed {
-                            child.set_content(Content::Pixel(GRN));
+                            child.set_content(Content::Pixel(YEL));
                         } else {
                             child.set_content(Content::Pixel(BG0));
                         }
