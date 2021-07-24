@@ -114,11 +114,10 @@ fn main() {
                 zriver_output_status_v1::Event::ViewTags { tags } => {
                     let len = tags.len();
                     for _ in applications.get::<Vec<app::Application>>().unwrap() {
-                        tag_list = Vec::new();
-                        for i in (0..len).into_iter().step_by(4) {
+                        tag_list = (0..len).into_iter().step_by(4).map(|i| {
                             let buf: [u8; 4] = [tags[i], tags[i + 1], tags[i + 2], tags[i + 3]];
-                            tag_list.push(u32::from_le_bytes(buf));
-                        }
+                            u32::from_le_bytes(buf)
+                        }).collect();
                         break;
                     }
                 }
