@@ -138,7 +138,7 @@ fn main() {
             .unwrap();
     }
 }
-pub fn create_widget(mut focused: u32, amount: u32, occupied: &Vec<u32>) -> ListBox {
+pub fn create_widget(mut focused: u32, amount: u32, occupied: &[u32]) -> ListBox {
     let bg = Rectangle::square(50, Content::Pixel(BG0));
     let hl = Rectangle::square(16, Content::Pixel(YEL));
     let hl2 = Rectangle::square(16, Content::Pixel(GRN));
