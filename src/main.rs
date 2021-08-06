@@ -1,9 +1,8 @@
 mod wayland;
 
 use snui::*;
-use snui::wayland::app;
-use snui::wayland::app::LayerSurface;
 use snui::widgets::*;
+use snui::wayland::app;
 
 const BG0: u32 = 0xff_26_25_25;
 const BG1: u32 = 0xff_33_32_32;
@@ -78,7 +77,6 @@ fn main() {
     let pointer = env.get_all_seats()[0].get_pointer();
     app::quick_assign_pointer::<app::Application>(&pointer, None);
 
-    let mut applications: Vec<app::Application> = Vec::new();
     let pointer = env.get_all_seats()[0].get_pointer();
     app::quick_assign_pointer::<app::Application>(&pointer, None);
 
@@ -89,13 +87,13 @@ fn main() {
         .get_layer_surface(&surface, None, Layer::Top, String::from("overlay"));
     layer_surface.set_exclusive_zone(-1);
 
-    app::assign_layer_surface::<app::Application>(&surface, &layer_surface);
-    applications.push(app::Application::new(
-        create_widget(0, 7, &vec![]),
-        surface,
-        &layer_surface,
+    let mut applications = vec![app::Application::new(
+        create_widget(7),
+        surface.clone(),
         mempool.unwrap(),
-    ));
+    )];
+
+    applications[0].attach_layer_surface(&layer_surface);
 
     let status_manager = env.require_global::<ZriverStatusManagerV1>();
     for output in &env.get_all_outputs() {
@@ -105,9 +103,9 @@ fn main() {
             match event {
                 zriver_output_status_v1::Event::FocusedTags { tags } => {
                     let applications = applications.get::<Vec<app::Application>>().unwrap();
-                    for widget in applications {
-                        widget.widget = Box::new(create_widget(tags, 7, &tag_list));
-                        widget.show();
+                    for app in applications {
+                        app.widget.send_action(Action::Data("occupied", &tag_list));
+                        app.send_action(Action::Data("focused", &tags));
                         break;
                     }
                 }
@@ -138,64 +136,39 @@ fn main() {
             .unwrap();
     }
 }
-pub fn create_widget(mut focused: u32, amount: u32, occupied: &[u32]) -> ListBox {
-    let bg = Rectangle::square(50, Content::Pixel(BG0));
-    let hl = Rectangle::square(16, Content::Pixel(YEL));
-    let hl2 = Rectangle::square(16, Content::Pixel(GRN));
+pub fn create_widget(amount: u32) -> Border<Background<Rectangle, Wbox>> {
+    let hl = Rectangle::square(16, YEL);
 
-    let mut bar = ListBox::new(Orientation::Horizontal);
-    bar.set_content(Content::Pixel(BG1));
-    bar.set_margin(10);
+    let mut bar = Wbox::new(Orientation::Horizontal);
+    bar.set_spacing(5);
 
-    let mut current;
     for n in 0..amount {
-        if {
-            current = 1 << n;
-            current == focused || (focused / current) % 2 != 0
-        } {
-            focused -= current;
-            let mut focused_icon = Node::new(bg);
-            focused_icon
-                .center(border(hl, 2, Content::Pixel(BG2)))
-                .unwrap();
-            bar.add(Button::new(
-                focused_icon,
-                move |child, input| match input {
-                    Input::MouseClick {
-                        time: _,
-                        button: _,
-                        pressed,
-                    } => {
-                        if pressed {
-                            child.set_content(Content::Pixel(YEL));
-                        } else {
-                            child.set_content(Content::Pixel(BG0));
-                        }
-                        true
-                    }
-                    _ => false,
-                },
-            ))
-            .unwrap();
-        } else {
-            let mut occupied_icon = Node::new(bg);
-            if {
-                let mut valid = false;
-                for tag in occupied {
-                    if 1 << n == *tag {
-                        valid = true;
+        let tag = 1 << n;
+        let icon = Background::new(Border::new(hl, 2, BG2), Rectangle::square(0,BG1), 15);
+        let action = Actionnable::new(icon, move |icon, action| {
+            if action.eq("focused") {
+                if let Some(focused) = action.get::<u32>() {
+                    if focused == &tag || (focused / tag) % 2 != 0 {
+                        icon.widget.set_color(BG2);
+                        icon.widget.widget.set_color(YEL)
                     }
                 }
-                valid
-            } {
-                occupied_icon
-                    .center(border(hl2, 2, Content::Pixel(BG2)))
-                    .unwrap();
-            } else {
-                occupied_icon.center(bg).unwrap();
+            } else if action.eq("occupied") {
+                if let Some(tags) = action.get::<Vec<u32>>() {
+                    icon.widget.set_color(BG1);
+                    icon.widget.widget.set_color(BG1);
+                    for t in tags {
+                        if t == &tag {
+                            icon.widget.set_color(BG2);
+                            icon.widget.widget.set_color(GRN);
+                        }
+                    }
+                }
             }
-            bar.add(occupied_icon).unwrap();
-        }
+        });
+        bar.add(action).unwrap();
     }
-    bar
+
+    bar.set_color(BG0);
+    boxed(bar, 5, 1, BG0, BG2)
 }
