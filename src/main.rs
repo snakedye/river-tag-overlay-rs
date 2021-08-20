@@ -165,19 +165,12 @@ fn main() {
                                 .chunks(4)
                                 .map(|s| {
                                     let buf = [s[0], s[1], s[2], s[3]];
-                                    let tagmask =
-                                        u32::from_le_bytes(buf);
-                                    for i in 0..32 {
-                                        if 1 << i == tagmask {
-                                            return 1+i;
-                                        }
-                                    }
-                                    0
+                                    u32::from_le_bytes(buf)
                                 })
                                 .collect();
                         }
                         zriver_output_status_v1::Event::UrgentTags{ tags } => {
-                        	app.widget.send_command(Command::Data("urgent", &tags), &mut Vec::new(), 0, 0);
+                        	// app.widget.send_command(Command::Data("urgent", &tags), &mut Vec::new(), 0, 0);
                         }
                     }
                 }
