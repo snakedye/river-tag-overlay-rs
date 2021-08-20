@@ -208,7 +208,7 @@ pub mod zriver_status_manager_v1 {
         type Request = Request;
         type Event = Event;
         const NAME: &'static str = "zriver_status_manager_v1";
-        const VERSION: u32 = 1;
+        const VERSION: u32 = 2;
         fn c_interface() -> *const wl_interface {
             unsafe { &zriver_status_manager_v1_interface }
         }
@@ -284,7 +284,7 @@ pub mod zriver_status_manager_v1 {
     #[doc = r" C representation of this interface, for interop"]
     pub static mut zriver_status_manager_v1_interface: wl_interface = wl_interface {
         name: b"zriver_status_manager_v1\0" as *const u8 as *const c_char,
-        version: 1,
+        version: 2,
         request_count: 3,
         requests: unsafe { &zriver_status_manager_v1_requests as *const _ },
         event_count: 0,
@@ -376,6 +376,8 @@ pub mod zriver_output_status_v1 {
         FocusedTags { tags: u32 },
         #[doc = "tag state of an output's views\n\nSent once on binding the interface and again whenever the tag state\nof the output changes."]
         ViewTags { tags: Vec<u8> },
+        #[doc = "tags of the output with an urgent view\n\nSent once on binding the interface and again whenever the set of\ntags with at least one urgent view changes.\n\nOnly available since version 2 of the interface"]
+        UrgentTags { tags: u32 },
     }
     impl super::MessageGroup for Event {
         const MESSAGES: &'static [super::MessageDesc] = &[
@@ -391,6 +393,12 @@ pub mod zriver_output_status_v1 {
                 signature: &[super::ArgumentType::Array],
                 destructor: false,
             },
+            super::MessageDesc {
+                name: "urgent_tags",
+                since: 2,
+                signature: &[super::ArgumentType::Uint],
+                destructor: false,
+            },
         ];
         type Map = super::ProxyMap;
         fn is_destructor(&self) -> bool {
@@ -402,12 +410,14 @@ pub mod zriver_output_status_v1 {
             match *self {
                 Event::FocusedTags { .. } => 0,
                 Event::ViewTags { .. } => 1,
+                Event::UrgentTags { .. } => 2,
             }
         }
         fn since(&self) -> u32 {
             match *self {
                 Event::FocusedTags { .. } => 1,
                 Event::ViewTags { .. } => 1,
+                Event::UrgentTags { .. } => 2,
             }
         }
         fn child<Meta: ObjectMetadata>(
@@ -445,6 +455,18 @@ pub mod zriver_output_status_v1 {
                         },
                     })
                 }
+                2 => {
+                    let mut args = msg.args.into_iter();
+                    Ok(Event::UrgentTags {
+                        tags: {
+                            if let Some(Argument::Uint(val)) = args.next() {
+                                val
+                            } else {
+                                return Err(());
+                            }
+                        },
+                    })
+                }
                 _ => Err(()),
             }
         }
@@ -470,6 +492,10 @@ pub mod zriver_output_status_v1 {
                                 .to_owned()
                         },
                     })
+                }
+                2 => {
+                    let _args = ::std::slice::from_raw_parts(args, 1);
+                    Ok(Event::UrgentTags { tags: _args[0].u })
                 }
                 _ => return Err(()),
             }
@@ -510,7 +536,7 @@ pub mod zriver_output_status_v1 {
         type Request = Request;
         type Event = Event;
         const NAME: &'static str = "zriver_output_status_v1";
-        const VERSION: u32 = 1;
+        const VERSION: u32 = 2;
         fn c_interface() -> *const wl_interface {
             unsafe { &zriver_output_status_v1_interface }
         }
@@ -528,6 +554,8 @@ pub mod zriver_output_status_v1 {
     pub const EVT_FOCUSED_TAGS_SINCE: u32 = 1u32;
     #[doc = r" The minimal object version supporting this event"]
     pub const EVT_VIEW_TAGS_SINCE: u32 = 1u32;
+    #[doc = r" The minimal object version supporting this event"]
+    pub const EVT_URGENT_TAGS_SINCE: u32 = 2u32;
     #[doc = r" C-representation of the messages of this interface, for interop"]
     pub static mut zriver_output_status_v1_requests: [wl_message; 1] = [wl_message {
         name: b"destroy\0" as *const u8 as *const c_char,
@@ -535,7 +563,7 @@ pub mod zriver_output_status_v1 {
         types: unsafe { &types_null as *const _ },
     }];
     #[doc = r" C-representation of the messages of this interface, for interop"]
-    pub static mut zriver_output_status_v1_events: [wl_message; 2] = [
+    pub static mut zriver_output_status_v1_events: [wl_message; 3] = [
         wl_message {
             name: b"focused_tags\0" as *const u8 as *const c_char,
             signature: b"u\0" as *const u8 as *const c_char,
@@ -546,14 +574,19 @@ pub mod zriver_output_status_v1 {
             signature: b"a\0" as *const u8 as *const c_char,
             types: unsafe { &types_null as *const _ },
         },
+        wl_message {
+            name: b"urgent_tags\0" as *const u8 as *const c_char,
+            signature: b"2u\0" as *const u8 as *const c_char,
+            types: unsafe { &types_null as *const _ },
+        },
     ];
     #[doc = r" C representation of this interface, for interop"]
     pub static mut zriver_output_status_v1_interface: wl_interface = wl_interface {
         name: b"zriver_output_status_v1\0" as *const u8 as *const c_char,
-        version: 1,
+        version: 2,
         request_count: 1,
         requests: unsafe { &zriver_output_status_v1_requests as *const _ },
-        event_count: 2,
+        event_count: 3,
         events: unsafe { &zriver_output_status_v1_events as *const _ },
     };
 }
