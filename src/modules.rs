@@ -1,5 +1,5 @@
-use snui::*;
 use snui::widgets::*;
+use snui::*;
 
 const BG1: u32 = 0xff_33_32_32;
 const BG2: u32 = 0xff_51_50_50;
@@ -83,7 +83,7 @@ impl TagButton {
         let icon = Rectangle::square(icon_size, BG1);
         Self {
             tag,
-            button: Button::new(icon, action)
+            button: Button::new(icon, action),
         }
     }
 }
