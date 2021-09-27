@@ -1,15 +1,14 @@
-mod modules;
 mod wayland;
 
+use snui::*;
+use std::time;
+use std::thread;
+use snui::widgets::*;
+use snui::wayland::app;
+use std::sync::mpsc::Sender;
+use wayland_client::{Display, Proxy};
 use crate::wayland::river_status_unstable_v1::zriver_output_status_v1;
 use crate::wayland::river_status_unstable_v1::zriver_status_manager_v1::ZriverStatusManagerV1;
-use smithay_client_toolkit::shm::AutoMemPool;
-use snui::wayland::Buffer;
-use snui::widgets::*;
-use snui::*;
-use std::thread;
-use std::time;
-use wayland_client::{Attached, Display, Main, Proxy};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_surface_v1;
@@ -59,21 +58,12 @@ environment!(Env,
 
 const BG0: u32 = 0xff_26_25_25;
 const BG1: u32 = 0xff_33_32_32;
+const GRN: u32 = 0xff_98_96_7E;
+const YEL: u32 = 0xff_c6_aa_82;
 
-struct App<W: Widget> {
-    widget: W,
-    mempool: AutoMemPool,
-    compositor: Attached<WlCompositor>,
-}
-
-impl<W: Widget> App<W> {
-    fn new(widget: W, mempool: AutoMemPool, compositor: Attached<WlCompositor>) -> Self {
-        Self {
-            widget,
-            mempool,
-            compositor,
-        }
-    }
+struct TagsData {
+    focused: u32,
+    views: Vec<u32>,
 }
 
 fn main() {
@@ -84,94 +74,102 @@ fn main() {
 
     let widget = create_widget(9, 40);
     let mut mempool = env.create_auto_pool().unwrap();
-    let compositor = env.require_global::<WlCompositor>();
+    let shm = env.require_global::<WlShm>();
     let status_manager = env.require_global::<ZriverStatusManagerV1>();
     let draw = mempool
         .resize((widget.get_width() * widget.get_height() * 4) as usize)
         .is_ok();
 
-    let mut app = App::new(widget, mempool, compositor);
+    let surface = env.create_surface();
+	let display_handle = display.clone();
+    let (app, mut sender) = app::Application::new(widget, surface.detach(), shm.detach());
+    thread::spawn(|| {
+        let mut state = 0;
+        app.run(display_handle, |app, pool, dispatch| match dispatch {
+                Dispatch::Data(name, mut data) => match name {
+                    "tagdata" => if let Some(tags) = data.as_mut().downcast_mut::<TagsData>() {
+                        for w in &mut app.widget.widget.widget.widgets.iter_mut() {
+                            w.widget.set_color(BG1);
+                        }
+                        for t in &tags.views {
+                            if *t < 9 {
+                                app.widget.widget.widget.widgets[*t as usize].widget.set_color(GRN);
+                            }
+                        }
+                        for (i, w) in &mut app.widget.widget.widget.widgets.iter_mut().enumerate() {
+                            let tagmask = 1 << i;
+                            if tagmask == tags.focused {
+                                w.widget.set_color(YEL);
+                            } else if tagmask != tags.focused && (tags.focused / tagmask) % 2 != 0 {
+                                w.widget.set_color(YEL);
+                                tags.focused -= 1 << i;
+                            }
+                        }
+                    },
+                    "swap" => {
+                        if let Some((surface, layer_surface)) = data.as_ref()
+                        	.downcast_ref::<(WlSurface, zwlr_layer_surface_v1::ZwlrLayerSurfaceV1)>() {
+                                if state == 0 {
+                                	app.destroy();
+                                	app.surface = surface.clone();
+                                	app.layer_surface = Some(layer_surface.clone());
+                                    layer_surface.set_size(app.widget.get_width(), app.widget.get_height());
+                                    surface.commit();
+                                } else {
+                                    app.render(pool);
+                                    app.show();
+                                }
+                                state += 1;
+                        }
+                    }
+                    _ => {}
+                }
+                Dispatch::Message(msg) => if msg == "hide" {
+                    if state > 1 {
+                        state -= 1;
+                    } else {
+                        app.hide();
+                        state -= 1;
+                    }
+                }
+                Dispatch::Commit => if state > 0 {
+                    app.init(pool);
+                }
+                _ => {}
+            }
+        );
+    });
 
     if draw {
         for output in env.get_all_outputs() {
-            let output_status = status_manager.get_river_output_status(&output);
-            let mut viewstag: Vec<u32> = Vec::new();
-            let display_handle = display.clone();
-            let mut surface_queue: Vec<Main<WlSurface>> = Vec::new();
+            let compositor = env.require_global::<WlCompositor>();
             let layer_shell = env.require_global::<ZwlrLayerShellV1>();
-            output_status.quick_assign(move |_, event, mut app| {
-                if let Some(app) = app.get::<App<Border<Background<WidgetLayout>>>>() {
+            let output_status = status_manager.get_river_output_status(&output);
+
+            let mut viewstag: Vec<u32> = Vec::new();
+            output_status.quick_assign(move |_, event, mut sender| {
+                if let Some(sender) = sender.get::<Sender<Dispatch>>() {
                     match event {
                         zriver_output_status_v1::Event::FocusedTags { tags } => {
-                            if let Some(surface) = surface_queue.pop() {
-                                surface.destroy();
+                            let tagdata = TagsData {
+                                focused: tags,
+                                views: viewstag.clone()
+                            };
+                            if sender.send(Dispatch::Data("tagdata", Box::new(tagdata))).is_ok() {
+                                let surface = compositor.create_surface();
+                                let layer_surface = layer_shell
+                                    .get_layer_surface(&surface, None, Layer::Overlay, "overlay".to_owned());
+                                surface.quick_assign(|_, _, _| {});
+                                app::assign_layer_surface(&surface, &layer_surface);
+                                sender.send(Dispatch::Data("swap", Box::new((surface.detach(), layer_surface.detach())))).unwrap();
+                                let handle = sender.clone();
+                                thread::spawn(move || {
+                                    thread::sleep(time::Duration::from_millis(500));
+                                    if let Err(e) = handle.send(Dispatch::Message("hide")) {
+                                        eprintln!("{}", e);
+                                    }
+                                });
                             }
-                            app.widget.send_command(
-                                Command::Data("occupied", &viewstag),
-                                &mut Vec::new(),
-                                0,
-                                0,
-                            );
-                            app.widget.send_command(
-                                Command::Data("focused", &tags),
-                                &mut Vec::new(),
-                                0,
-                                0,
-                            );
-                            let width = app.widget.get_width();
-                            let height = app.widget.get_height();
-                            let surface = app.compositor.create_surface();
-                            let layer_surface = layer_shell.get_layer_surface(
-                                &surface,
-                                None,
-                                Layer::Overlay,
-                                "overlay".to_owned(),
-                            );
-                            surface.quick_assign(|_, _, _| {});
-                            layer_surface.set_size(width, height);
-                            surface.commit();
-
-                            let mut buffer = Buffer::new(
-                                width as i32,
-                                height as i32,
-                                width as i32 * 4,
-                                &mut app.mempool,
-                            );
-                            app.widget.draw(buffer.get_mut_buf(), width, 0, 0);
-
-                            let surface_handle = surface.detach();
-                            let display_handle = display_handle.clone();
-                            layer_surface.quick_assign(
-                                move |layer_surface, event, _| match event {
-                                    zwlr_layer_surface_v1::Event::Configure {
-                                        serial,
-                                        width: _,
-                                        height: _,
-                                    } => {
-                                        let display_handle = display_handle.clone();
-                                        layer_surface.ack_configure(serial);
-                                        surface_handle.damage(0, 0, 1 << 30, 1 << 30);
-                                        surface_handle.commit();
-                                        let layer_surface = layer_surface.detach();
-                                        let surface_handle = surface_handle.clone();
-                                        thread::spawn(move || {
-                                            let mut event_queue =
-                                                display_handle.create_event_queue();
-                                            thread::sleep(time::Duration::from_millis(600));
-                                            layer_surface.destroy();
-                                            surface_handle.destroy();
-                                            event_queue
-                                                .sync_roundtrip(&mut (), |_, _, _| unreachable!())
-                                                .unwrap();
-                                        });
-                                    }
-                                    _ => {
-                                        layer_surface.destroy();
-                                    }
-                                },
-                            );
-                            buffer.attach(&surface, 0, 0);
-                            surface_queue.push(surface);
                         }
                         zriver_output_status_v1::Event::ViewTags { tags } => {
                             viewstag = tags[0..]
@@ -183,21 +181,17 @@ fn main() {
                                 .collect();
                         }
                         zriver_output_status_v1::Event::UrgentTags { tags } => {
-                            app.widget.send_command(
-                                Command::Data("urgent", &tags),
-                                &mut Vec::new(),
-                                0,
-                                0,
-                            );
+                            sender.send(Dispatch::Data("urgent", Box::new(tags))).unwrap();
                         }
                     }
                 }
             });
         }
     }
+
     loop {
         event_queue
-            .dispatch(&mut app, |event, object, _| {
+            .dispatch(&mut sender, |event, object, _| {
                 panic!(
                     "[callop] Encountered an orphan event: {}@{}: {}",
                     event.interface,
@@ -210,12 +204,10 @@ fn main() {
 }
 
 fn create_widget(amount: u32, icon_size: u32) -> Border<Background<WidgetLayout>> {
-    let mut tags = WidgetLayout::new(Orientation::Horizontal);
-    tags.set_spacing(10);
+    let mut tags = WidgetLayout::horizontal(10);
 
-    for n in 0..amount {
-        let tag = 1 << n;
-        tags.add(modules::TagButton::new(tag, icon_size)).unwrap();
+    for _ in 0..amount {
+        tags.add(Rectangle::square(icon_size, BG1)).unwrap();
     }
 
     boxed(tags, 10, 1, BG0, BG1)
